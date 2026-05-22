@@ -32,6 +32,7 @@ export default function ReceiveScreen({ setScreen, walletName }) {
       setIsListening(true);
       
       await NfcManager.requestTechnology(NfcTech.IsoDep);
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       const selectApdu = [0x00, 0xA4, 0x04, 0x00, 0x07, 0xF0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
       await NfcManager.isoDepHandler.transceive(selectApdu);
@@ -39,16 +40,37 @@ export default function ReceiveScreen({ setScreen, walletName }) {
       const requestApdu = [0x80, 0x01, 0x02, 0x03];
       const payloadResponse = await NfcManager.isoDepHandler.transceive(requestApdu);
 
-      const payloadBytes = payloadResponse.slice(0, -2);
-      const payloadString = String.fromCharCode.apply(null, payloadBytes);
-      const transactionData = JSON.parse(payloadString);
+      if (!payloadResponse || payloadResponse.length <= 2) {
+        throw new Error("Empty response from sender phone.");
+      }
 
-      // ⚡ BUG FIX: Extract txnId, not id!
+      const payloadBytes = payloadResponse.slice(0, -2);
+      
+      // Fallback clean decoding
+      let payloadString = "";
+      try {
+        payloadString = String.fromCharCode.apply(null, payloadBytes);
+      } catch (e) {
+        payloadString = Array.from(payloadBytes).map(b => String.fromCharCode(b)).join('');
+      }
+
+      const rawData = JSON.parse(payloadString);
+
+      // ⚡ DECOMPRESSION DECODER
+      // Expands the compressed NFC packet back to standard JSON
+      const transactionData = rawData.T ? {
+        txnId: rawData.I,
+        fromName: rawData.N,
+        amount: rawData.A,
+        note: rawData.O,
+        signature: rawData.S
+      } : rawData;
+
       const newTxn = {
         id: transactionData.txnId, 
         type: 'received',
         name: transactionData.fromName || 'Incoming Tap', 
-        amount: transactionData.amount,
+        amount: parseFloat(transactionData.amount),
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         mode: 'NFC Tap',
         status: 'confirmed',
@@ -59,27 +81,23 @@ export default function ReceiveScreen({ setScreen, walletName }) {
       const success = await insertTransaction(newTxn);
 
       if (success) {
-        // ⚡ BUG FIX: Send the correct receipt back!
         const receiptString = "OK_" + transactionData.txnId;
         const receiptBytes = [];
         for (let i = 0; i < receiptString.length; i++) {
           receiptBytes.push(receiptString.charCodeAt(i));
         }
         const receiptApdu = [0x80, 0x02, ...receiptBytes];
-        
         await NfcManager.isoDepHandler.transceive(receiptApdu);
 
         Alert.alert("💸 Payment Received!", `Successfully extracted ₹${transactionData.amount} via hardware tap.`);
         setScreen('home'); 
       } else {
-        Alert.alert("Database Error", "Received the radio waves but failed to write to local SQLite.");
+        Alert.alert("Database Error", "Failed to write txn to SQLite.");
       }
 
     } catch (error) {
       console.warn('NFC Error:', error);
-      if (isListening) {
-        Alert.alert("Connection Lost", "The tap was interrupted. Please try holding the phones together again.");
-      }
+      Alert.alert("NFC Debug Info", `Error: ${error.message || error}`);
     } finally {
       NfcManager.cancelTechnologyRequest();
       setIsListening(false);

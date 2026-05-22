@@ -23,8 +23,6 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.NFC",
-        "android.permission.CAMERA",
         "android.permission.NFC"
       ],
       "package": "com.anonymous.OfflineCBDCWallet"
@@ -36,6 +34,11 @@
       "expo-sqlite",
       "react-native-nfc-manager",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "08382f2e-8147-44f6-ad5a-d40a648023ce"
+      }
+    }
   }
 }

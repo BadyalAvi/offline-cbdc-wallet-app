@@ -74,6 +74,19 @@ export default function SendScreen({ setScreen, balance, walletName, walletId })
 
     try {
       const signedTxn = signPayment(payload);
+      
+      // ⚡ COMPRESSION TUNNEL FOR NFC HARDWARE LIMITATION
+      const nfcCompressedPayload = {
+        T: signedTxn.type,
+        V: signedTxn.version,
+        I: signedTxn.txnId,
+        F: signedTxn.fromId,
+        N: signedTxn.fromName,
+        A: signedTxn.amount,
+        O: signedTxn.note,
+        S: signedTxn.signature // Keeps the large signature safe
+      };
+
       setTxData(JSON.stringify(signedTxn));
       setMode(selectedMode);
 
@@ -91,7 +104,8 @@ export default function SendScreen({ setScreen, balance, walletName, walletId })
       };
 
       if (selectedMode === 'NFC') {
-        startHardwareBroadcast(JSON.stringify(signedTxn), dbRecordToSaveLater);
+        // Broadcast the ultra-compact compressed payload to slide under 256 bytes
+        startHardwareBroadcast(JSON.stringify(nfcCompressedPayload), dbRecordToSaveLater);
       } else {
         // If it's a QR code, we still have to deduct immediately (the QR flaw we discussed)
         await insertTransaction(dbRecordToSaveLater);

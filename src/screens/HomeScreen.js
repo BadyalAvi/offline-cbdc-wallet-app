@@ -72,11 +72,19 @@ export default function HomeScreen({ setScreen, ledger, balance, walletName, wal
 
     setIsSyncing(true);
     try {
-      const SERVER_URL = 'http://192.168.1.4:3000/api/sync'; 
+      const SERVER_URL = 'https://offline-cbdc-sdk.onrender.com/api/sync'; 
       
+      // ⚡ THE FIX: Inject the precise algorithmic timestamp into every transaction payload
+      const chronologicallyStampedTxns = unsyncedTxns.map(txn => {
+        return {
+          ...txn,
+          txn_timestamp: Date.now() // This feeds the Phase 1 Sorting Algorithm
+        };
+      });
+
       const payload = {
         walletId: walletId,
-        offlineTransactions: unsyncedTxns
+        offlineTransactions: chronologicallyStampedTxns
       };
 
       const response = await fetch(SERVER_URL, {
@@ -91,8 +99,8 @@ export default function HomeScreen({ setScreen, ledger, balance, walletName, wal
         setJustSyncedIds(prev => [...prev, ...data.syncedIds]);
 
         Alert.alert(
-          '✅ Cloud Sync Complete', 
-          `${data.accepted} offline transactions cryptographically verified and settled to the master vault.`
+          '✅ Algorithmic Sync Complete', 
+          `${data.accepted} transactions sorted and settled to the master vault.`
         );
         
         if (data.syncedIds && data.syncedIds.length > 0) {
